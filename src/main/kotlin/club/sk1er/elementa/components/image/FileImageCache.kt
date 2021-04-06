@@ -14,6 +14,7 @@ import javax.imageio.IIOImage
 import javax.imageio.ImageTypeSpecifier
 import java.io.ByteArrayInputStream
 import java.net.URL
+import java.nio.channels.FileChannel
 
 
 class FileImageCache(
@@ -35,22 +36,28 @@ class FileImageCache(
     override operator fun get(url: URL): BufferedImage? {
         val hashCode = url.hashCode()
         var index = 0
-        while (true) {
-            val file = File(directory, "$hashCode-$index.png")
-            if (!file.exists()) {
-                return null
-            }
-            val cacheItem = readEntry(file)
-            if (cacheItem.second == url.toString()) {
-                if (System.currentTimeMillis() - cacheItem.third < timeUnit.toMillis(cacheTime)) {
-                    return cacheItem.first
-                } else if (deleteOnCacheMiss) {
-                    file.delete()
-                    moveDown(hashCode, index)
+        FileChannel.open(File(directory, "$hashCode-$index.png").toPath()).use { open ->
+            val lock = open.lock();
+            while (true) {
+                val file = File(directory, "$hashCode-$index.png")
+                if (!file.exists()) {
+                    lock.release()
+                    return null
                 }
+                val cacheItem = readEntry(file)
+                if (cacheItem.second == url.toString()) {
+                    if (System.currentTimeMillis() - cacheItem.third < timeUnit.toMillis(cacheTime)) {
+                        lock.release()
+                        return cacheItem.first
+                    } else if (deleteOnCacheMiss) {
+                        file.delete()
+                        moveDown(hashCode, index)
+                    }
+                }
+                index++
             }
-            index++
         }
+        return null
     }
 
     override operator fun set(url: URL, image: BufferedImage) {
