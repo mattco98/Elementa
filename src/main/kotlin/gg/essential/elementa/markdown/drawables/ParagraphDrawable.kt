@@ -17,16 +17,12 @@ import kotlin.math.floor
 
 class ParagraphDrawable(
     md: MarkdownComponent,
-    drawables: DrawableList
+    private val originalDrawables: DrawableList
 ) : Drawable(md) {
-    val textDrawables: List<TextDrawable>
+    private val textDrawables: List<TextDrawable>
         get() = drawables.filterIsInstance<TextDrawable>()
 
-    var drawables = drawables
-        private set(value) {
-            field = value
-            value.forEach { it.parent = this }
-        }
+    private val drawables = mutableListOf<Drawable>()
 
     override val children: List<Drawable> get() = drawables
 
@@ -40,16 +36,16 @@ class ParagraphDrawable(
         }
 
     init {
-        drawables.parent = this
+        originalDrawables.parent = this
     }
 
     override fun layoutImpl(x: Float, y: Float, width: Float): Layout {
         val marginTop = if (insertSpaceBefore) config.paragraphConfig.spaceBefore else 0f
         val marginBottom = if (insertSpaceAfter) config.paragraphConfig.spaceAfter else 0f
 
-        // We need to build a new drawable list, as text drawables may be split
-        // into two or more during layout.
-        val newDrawables = mutableListOf<Drawable>()
+        // We process originalDrawables into this drawables list, as text drawables
+        // may be split into two or more during layout.
+        drawables.clear()
 
         var currX = x
         var currY = y + marginTop
@@ -57,11 +53,11 @@ class ParagraphDrawable(
         val centered = config.paragraphConfig.centered
 
         // Used to trim text components which are at the start of the line
-        // or after a soft break so we don't render extra spaces
+        // or after a soft break, so we don't render extra spaces
         var trimNextText = true
 
         // These are used for centered text. When we render centered markdown,
-        // we layout all of our text drawables as normal, and center them after.
+        // we lay out all of our text drawables as normal, and center them after.
         // These lists help keep track of which drawables are on their own lines.
         val lines = mutableListOf<List<Drawable>>()
         val currentLine = mutableListOf<Drawable>()
@@ -100,23 +96,23 @@ class ParagraphDrawable(
             currX += newWidth
             trimNextText = false
             currentLine.add(drawable)
-            newDrawables.add(drawable)
+            drawables.add(drawable)
         }
 
-        for ((index, text) in drawables.withIndex()) {
+        for ((index, text) in originalDrawables.withIndex()) {
             if (text is SoftBreakDrawable) {
                 if (config.paragraphConfig.softBreakIsNewline) {
                     gotoNextLine()
                 } else {
-                    val previousStyle = (newDrawables.lastOrNull { it is TextDrawable } as? TextDrawable)?.style
+                    val previousStyle = (drawables.lastOrNull { it is TextDrawable } as? TextDrawable)?.style
                         ?: TextDrawable.Style.EMPTY
                     val newText = TextDrawable(md, " ", previousStyle)
 
                     // Do this before laying out newText, so that newText isn't in the
-                    // newDrawables list yet
-                    if (newDrawables.isNotEmpty() && index != drawables.lastIndex) {
-                        val previous = newDrawables.last()
-                        val next = drawables[index + 1]
+                    // drawables list yet
+                    if (drawables.isNotEmpty() && index != originalDrawables.lastIndex) {
+                        val previous = drawables.last()
+                        val next = originalDrawables[index + 1]
                         if (previous is TextDrawable && next is TextDrawable && previous.style == next.style) {
                             // Link the two texts together, as a soft break (when not
                             // treated as a new line) should not interrupt a link
@@ -238,12 +234,6 @@ class ParagraphDrawable(
                 }
             }
         }
-
-        // TODO: We probably shouldn't mutate drawables directly, as if the
-        // MarkdownComponent re-layouts many times and causes a bunch of text
-        // splits, we'll have many, many small text drawables instead of a few
-        // large text drawables, which requires more work to deal with.
-        drawables = DrawableList(md, newDrawables)
 
         val height = currY - y + 9f * scaleModifier + if (insertSpaceAfter) {
             config.paragraphConfig.spaceAfter
