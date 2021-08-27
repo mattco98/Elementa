@@ -32,7 +32,7 @@ class TextDrawable(
     // Used to store the Text classes to render between beforeDraw and draw
     private var texts = mutableListOf<Text>()
 
-    // Stores whether or not this component is hovered
+    // Stores whether this component is hovered
     private var isHovered = false
 
     // Populated with any text drawables which used to be part of this

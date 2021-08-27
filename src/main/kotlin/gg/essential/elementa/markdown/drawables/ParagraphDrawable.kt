@@ -104,8 +104,9 @@ class ParagraphDrawable(
                 if (config.paragraphConfig.softBreakIsNewline) {
                     gotoNextLine()
                 } else {
-                    val previousStyle = (drawables.lastOrNull { it is TextDrawable } as? TextDrawable)?.style
-                        ?: TextDrawable.Style.EMPTY
+                    val previousStyle = (drawables.lastOrNull { it is TextDrawable } as? TextDrawable)?.let {
+                        it.style.copy(isCode = false)
+                    } ?: TextDrawable.Style.EMPTY
                     val newText = TextDrawable(md, " ", previousStyle)
 
                     // Do this before laying out newText, so that newText isn't in the
